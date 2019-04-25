@@ -23,6 +23,7 @@ import datawave.marking.SecurityMarking;
 import datawave.query.data.UUIDType;
 import datawave.resteasy.interceptor.CreateQuerySessionIDFilter;
 import datawave.security.authorization.DatawavePrincipal;
+import datawave.security.util.AuthorizationsUtil;
 import datawave.webservice.common.audit.AuditBean;
 import datawave.webservice.common.audit.AuditParameters;
 import datawave.webservice.common.audit.Auditor.AuditType;
@@ -45,6 +46,7 @@ import datawave.webservice.query.cache.QueryMetricFactory;
 import datawave.webservice.query.cache.QueryTraceCache;
 import datawave.webservice.query.cache.ResultsPage;
 import datawave.webservice.query.cache.RunningQueryTimingImpl;
+import datawave.webservice.query.configuration.GenericQueryConfiguration;
 import datawave.webservice.query.configuration.LookupUUIDConfiguration;
 import datawave.webservice.query.exception.BadRequestQueryException;
 import datawave.webservice.query.exception.DatawaveErrorCode;
@@ -83,6 +85,7 @@ import io.protostuff.ProtobufIOUtil;
 import io.protostuff.Schema;
 import io.protostuff.YamlIOUtil;
 import org.apache.accumulo.core.client.Connector;
+import org.apache.accumulo.core.security.Authorizations;
 import org.apache.accumulo.core.trace.Span;
 import org.apache.accumulo.core.trace.Trace;
 import org.apache.accumulo.core.trace.Tracer;
@@ -779,7 +782,97 @@ public class QueryExecutorBean implements QueryExecutor {
             }
         }
     }
-    
+
+    /**
+     * @param queryLogicName
+     * @param queryParameters
+     * @return
+     */
+    @POST
+    @Produces({"application/xml", "text/xml", "application/json", "text/yaml", "text/x-yaml", "application/x-yaml", "application/x-protobuf",
+            "application/x-protostuff"})
+    @Path("/{logicName}/plan")
+    @Interceptors({RequiredInterceptor.class, ResponseInterceptor.class})
+    @Timed(name = "dw.query.planQuery", absolute = true)
+    public GenericResponse<String> planQuery(@Required("logicName") @PathParam("logicName") String queryLogicName,
+                                               MultivaluedMap<String,String> queryParameters, @Context HttpHeaders httpHeaders) {
+        QueryData qd = validateQuery(queryLogicName, queryParameters, httpHeaders);
+
+        GenericResponse<String> response = new GenericResponse<>();
+
+        Query q = null;
+        Connector connection = null;
+        AccumuloConnectionFactory.Priority priority;
+        try {
+            // Default hasResults to true.
+            response.setHasResults(true);
+
+            MultivaluedMap<String,String> optionalQueryParameters = qp.getUnknownParameters(queryParameters);
+            q = persister.create(qd.userDn, qd.dnList, marking, queryLogicName, qp, optionalQueryParameters);
+
+            priority = qd.logic.getConnectionPriority();
+            Map<String,String> trackingMap = connectionFactory.getTrackingMap(Thread.currentThread().getStackTrace());
+            addQueryToTrackingMap(trackingMap, q);
+            accumuloConnectionRequestBean.requestBegin(q.getId().toString());
+            try {
+                connection = connectionFactory.getConnection(qd.logic.getConnPoolName(), priority, trackingMap);
+            } finally {
+                accumuloConnectionRequestBean.requestEnd(q.getId().toString());
+            }
+
+            Set<Authorizations> calculatedAuths = AuthorizationsUtil.getDowngradedAuthorizations(qp.getAuths(), qd.p);
+            GenericQueryConfiguration configuration = qd.logic.initialize(connection, q, calculatedAuths);
+            String plan = qd.logic.planQuery(configuration);
+            response.setResult(plan);
+
+            return response;
+        } catch (Throwable t) {
+            response.setHasResults(false);
+
+            /*
+             * Allow web services to throw their own WebApplicationExceptions
+             */
+            if (t instanceof Error && !(t instanceof TokenMgrError)) {
+                log.error(t.getMessage(), t);
+                throw (Error) t;
+            } else if (t instanceof WebApplicationException) {
+                log.error(t.getMessage(), t);
+                throw ((WebApplicationException) t);
+            } else {
+                log.error(t.getMessage(), t);
+                QueryException qe = new QueryException(DatawaveErrorCode.QUERY_PLAN_ERROR, t);
+                response.addException(qe.getBottomQueryException());
+                int statusCode = qe.getBottomQueryException().getStatusCode();
+                throw new DatawaveWebApplicationException(qe, response, statusCode);
+            }
+        } finally {
+            if (connection != null) {
+                try {
+                    connectionFactory.returnConnection(connection);
+                } catch (Exception e) {
+                    log.error("Failed to close connection for " + q.getId(), e);
+                }
+            }
+
+            // close the logic on exception
+            try {
+                if (null != qd.logic) {
+                    qd.logic.close();
+                }
+            } catch (Exception e) {
+                log.error("Exception occured while closing query logic; may be innocuous if scanners were running.", e);
+            }
+
+            if (null != connection) {
+                try {
+                    connectionFactory.returnConnection(connection);
+                } catch (Exception e) {
+                    log.error("Error returning connection on failed create", e);
+                }
+            }
+        }
+    }
+
     /**
      * @param queryLogicName
      * @param queryParameters
