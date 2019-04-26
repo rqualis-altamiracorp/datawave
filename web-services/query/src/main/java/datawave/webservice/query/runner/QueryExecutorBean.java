@@ -178,6 +178,7 @@ import static datawave.webservice.query.cache.QueryTraceCache.PatternWrapper;
 public class QueryExecutorBean implements QueryExecutor {
     
     private static final String PRIVILEGED_USER = "PrivilegedUser";
+    private static final String USE_INDEX_PARAMETER = "useIndex";
     
     private final Logger log = Logger.getLogger(QueryExecutorBean.class);
     
@@ -782,7 +783,7 @@ public class QueryExecutorBean implements QueryExecutor {
             }
         }
     }
-
+    
     /**
      * @param queryLogicName
      * @param queryParameters
@@ -795,21 +796,58 @@ public class QueryExecutorBean implements QueryExecutor {
     @Interceptors({RequiredInterceptor.class, ResponseInterceptor.class})
     @Timed(name = "dw.query.planQuery", absolute = true)
     public GenericResponse<String> planQuery(@Required("logicName") @PathParam("logicName") String queryLogicName,
-                                               MultivaluedMap<String,String> queryParameters, @Context HttpHeaders httpHeaders) {
+                    MultivaluedMap<String,String> queryParameters, @Context HttpHeaders httpHeaders) {
         QueryData qd = validateQuery(queryLogicName, queryParameters, httpHeaders);
-
+        
         GenericResponse<String> response = new GenericResponse<>();
-
+        
         Query q = null;
         Connector connection = null;
         AccumuloConnectionFactory.Priority priority;
         try {
             // Default hasResults to true.
             response.setHasResults(true);
-
-            MultivaluedMap<String,String> optionalQueryParameters = qp.getUnknownParameters(queryParameters);
-            q = persister.create(qd.userDn, qd.dnList, marking, queryLogicName, qp, optionalQueryParameters);
-
+            
+            boolean useIndex = false;
+            if (queryParameters.containsKey(USE_INDEX_PARAMETER)) {
+                useIndex = Boolean.valueOf(queryParameters.getFirst(USE_INDEX_PARAMETER));
+            }
+            
+            AuditType auditType = qd.logic.getAuditType(null);
+            try {
+                MultivaluedMap<String,String> optionalQueryParameters = qp.getUnknownParameters(queryParameters);
+                q = persister.create(qd.userDn, qd.dnList, marking, queryLogicName, qp, optionalQueryParameters);
+                auditType = qd.logic.getAuditType(q);
+            } finally {
+                queryParameters.add(PrivateAuditConstants.AUDIT_TYPE, auditType.name());
+                
+                // on audit if needed, and we are using the index
+                if (useIndex && !auditType.equals(AuditType.NONE)) {
+                    // audit the query before its executed.
+                    try {
+                        try {
+                            List<String> selectors = qd.logic.getSelectors(q);
+                            if (selectors != null && !selectors.isEmpty()) {
+                                queryParameters.put(PrivateAuditConstants.SELECTORS, selectors);
+                            }
+                        } catch (Exception e) {
+                            log.error("Error accessing query selector", e);
+                        }
+                        auditor.audit(queryParameters);
+                    } catch (IllegalArgumentException e) {
+                        log.error("Error validating audit parameters", e);
+                        BadRequestQueryException qe = new BadRequestQueryException(DatawaveErrorCode.MISSING_REQUIRED_PARAMETER, e);
+                        response.addException(qe);
+                        throw new BadRequestException(qe, response);
+                    } catch (Exception e) {
+                        log.error("Error auditing query", e);
+                        QueryException qe = new QueryException(DatawaveErrorCode.QUERY_AUDITING_ERROR, e);
+                        response.addException(qe);
+                        throw qe;
+                    }
+                }
+            }
+            
             priority = qd.logic.getConnectionPriority();
             Map<String,String> trackingMap = connectionFactory.getTrackingMap(Thread.currentThread().getStackTrace());
             addQueryToTrackingMap(trackingMap, q);
@@ -819,16 +857,15 @@ public class QueryExecutorBean implements QueryExecutor {
             } finally {
                 accumuloConnectionRequestBean.requestEnd(q.getId().toString());
             }
-
+            
             Set<Authorizations> calculatedAuths = AuthorizationsUtil.getDowngradedAuthorizations(qp.getAuths(), qd.p);
-            GenericQueryConfiguration configuration = qd.logic.initialize(connection, q, calculatedAuths);
-            String plan = qd.logic.planQuery(configuration);
+            String plan = qd.logic.getPlan(connection, q, calculatedAuths, false);
             response.setResult(plan);
-
+            
             return response;
         } catch (Throwable t) {
             response.setHasResults(false);
-
+            
             /*
              * Allow web services to throw their own WebApplicationExceptions
              */
@@ -853,7 +890,7 @@ public class QueryExecutorBean implements QueryExecutor {
                     log.error("Failed to close connection for " + q.getId(), e);
                 }
             }
-
+            
             // close the logic on exception
             try {
                 if (null != qd.logic) {
@@ -862,7 +899,7 @@ public class QueryExecutorBean implements QueryExecutor {
             } catch (Exception e) {
                 log.error("Exception occured while closing query logic; may be innocuous if scanners were running.", e);
             }
-
+            
             if (null != connection) {
                 try {
                     connectionFactory.returnConnection(connection);
@@ -872,7 +909,7 @@ public class QueryExecutorBean implements QueryExecutor {
             }
         }
     }
-
+    
     /**
      * @param queryLogicName
      * @param queryParameters

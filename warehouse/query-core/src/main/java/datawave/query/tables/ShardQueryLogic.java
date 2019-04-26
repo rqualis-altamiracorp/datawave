@@ -256,8 +256,19 @@ public class ShardQueryLogic extends BaseQueryLogic<Entry<Key,Value>> {
         if (log.isTraceEnabled())
             log.trace("Initializing ShardQueryLogic: " + System.identityHashCode(this) + '('
                             + (this.getSettings() == null ? "empty" : this.getSettings().getId()) + ')');
-        initialize(config, connection, settings, auths);
+        initialize(config, connection, settings, auths, true);
         return config;
+    }
+    
+    @Override
+    public String getPlan(Connector connection, Query settings, Set<Authorizations> auths, boolean useIndex) throws Exception {
+        
+        this.config = ShardQueryConfiguration.create(this, settings);
+        if (log.isTraceEnabled())
+            log.trace("Initializing ShardQueryLogic for plan: " + System.identityHashCode(this) + '('
+                            + (this.getSettings() == null ? "empty" : this.getSettings().getId()) + ')' + " useIndex=" + useIndex);
+        initialize(config, connection, settings, auths, useIndex);
+        return config.getQueryString();
     }
     
     protected String expandQueryMacros(String query) throws ParseException {
@@ -332,7 +343,7 @@ public class ShardQueryLogic extends BaseQueryLogic<Entry<Key,Value>> {
         return queryString;
     }
     
-    public void initialize(ShardQueryConfiguration config, Connector connection, Query settings, Set<Authorizations> auths) throws Exception {
+    public void initialize(ShardQueryConfiguration config, Connector connection, Query settings, Set<Authorizations> auths, boolean useIndex) throws Exception {
         // Set the connector and the authorizations into the config object
         config.setConnector(connection);
         config.setAuthorizations(auths);
@@ -396,6 +407,7 @@ public class ShardQueryLogic extends BaseQueryLogic<Entry<Key,Value>> {
         
         getQueryPlanner().setCreateUidsIteratorClass(createUidsIteratorClass);
         getQueryPlanner().setUidIntersector(uidIntersector);
+        getQueryPlanner().setUseIndex(useIndex);
         
         validateConfiguration(config);
         

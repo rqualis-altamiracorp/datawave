@@ -1088,12 +1088,11 @@ public class DefaultQueryPlanner extends QueryPlanner {
             stopwatch.stop();
         }
         
-        if (!disableBoundedLookup) {
+        if (isUseIndex() && !disableBoundedLookup) {
             stopwatch = timers.newStartedStopwatch("DefaultQueryPlanner - Expand bounded query ranges");
             
             // Expand any bounded ranges into a conjunction of discrete terms
             try {
-                
                 ParallelIndexExpansion regexExpansion = new ParallelIndexExpansion(config, scannerFactory, metadataHelper, expansionFields);
                 queryTree = (ASTJexlScript) regexExpansion.visit(queryTree, null);
                 queryTree = RangeConjunctionRebuildingVisitor.expandRanges(config, scannerFactory, metadataHelper, queryTree);
