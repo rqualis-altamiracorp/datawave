@@ -413,7 +413,36 @@ public abstract class AbstractFunctionalQuery implements QueryLogicTestHarness.T
         
         return this.logic.initialize(connector, q, this.authSet);
     }
-    
+
+    /**
+     * Used by test cases that verify the plan
+     *
+     * @param queryStr
+     *            query string for evaluation
+     * @param expandFields
+     *            whether to use the index for anyfield expansion
+     * @param expandValues
+     *            whether to use the index for regex/range expansion
+     * @return query configuration
+     * @throws Exception
+     *             error condition from query initialization
+     */
+    protected String getPlan(final String queryStr, boolean expandFields, boolean expandValues) throws Exception {
+        Date[] startEndDate = this.dataManager.getShardStartEndDate();
+        log.debug("  query[" + queryStr + "]  start(" + YMD_DateFormat.format(startEndDate[0]) + ")  end(" + YMD_DateFormat.format(startEndDate[1]) + ")");
+
+        QueryImpl q = new QueryImpl();
+        q.setBeginDate(startEndDate[0]);
+        q.setEndDate(startEndDate[1]);
+        q.setQuery(queryStr);
+
+        q.setId(UUID.randomUUID());
+        q.setPagesize(Integer.MAX_VALUE);
+        q.setQueryAuthorizations(auths.toString());
+
+        return this.logic.getPlan(connector, q, this.authSet, expandFields, expandValues);
+    }
+
     /**
      * Configures the Ivarator cache to use a single HDFS directory.
      *

@@ -34,9 +34,13 @@ public interface QueryLogic<T> extends Iterable<T>, Cloneable, ParameterValidato
      *            - query settings (query, begin date, end date, etc.)
      * @param runtimeQueryAuthorizations
      *            - authorizations that have been calculated for this query based on the caller and server.
+     * @param expandFields
+     *            - should unfielded terms be expanded
+     * @param expandValues
+     *            - should regex/ranges be expanded into discrete values
      */
-    default String getPlan(Connector connection, Query settings, Set<Authorizations> runtimeQueryAuthorizations, boolean useIndex) throws Exception {
-        if (useIndex) {
+    default String getPlan(Connector connection, Query settings, Set<Authorizations> runtimeQueryAuthorizations, boolean expandFields, boolean expandValues) throws Exception {
+        if (expandFields && expandValues) {
             GenericQueryConfiguration configuration = initialize(connection, settings, runtimeQueryAuthorizations);
             return configuration.getQueryString();
         } else {

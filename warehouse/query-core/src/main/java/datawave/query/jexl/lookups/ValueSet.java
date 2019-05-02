@@ -122,7 +122,7 @@ public class ValueSet implements Set<String>, Serializable {
     }
     
     private void testExceeded(String e) {
-        if (threshold > 0 && !exceededThreshold && !values.contains(e) && (size() + 1 > threshold)) {
+        if (threshold >= 0 && !exceededThreshold && !values.contains(e) && (size() + 1 > threshold)) {
             markExceeded();
         }
     }

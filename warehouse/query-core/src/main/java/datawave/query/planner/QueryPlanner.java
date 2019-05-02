@@ -20,9 +20,7 @@ public abstract class QueryPlanner implements PushDownPlanner {
     protected Class<? extends SortedKeyValueIterator<Key,Value>> createUidsIteratorClass = CreateUidsIterator.class;
     
     protected UidIntersector uidIntersector = new IndexInfo();
-    
-    protected volatile boolean useIndex = true;
-    
+
     /**
      * Process the {@code query} with the provided {@code config} to generate an {@link Iterable}&lt;QueryData&gt; to apply each to a BatchScanner.
      *
@@ -66,13 +64,4 @@ public abstract class QueryPlanner implements PushDownPlanner {
     public void setUidIntersector(UidIntersector uidIntersector) {
         this.uidIntersector = uidIntersector;
     }
-    
-    public boolean isUseIndex() {
-        return useIndex;
-    }
-    
-    public void setUseIndex(boolean useIndex) {
-        this.useIndex = useIndex;
-    }
-    
 }

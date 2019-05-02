@@ -5,6 +5,7 @@ import java.math.BigInteger;
 import java.text.MessageFormat;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.List;
 import java.util.Set;
 
@@ -80,25 +81,52 @@ public class JexlNodeFactory {
      *            A mapping of fields to values. If the values for a field is empty, then the original regex should be used.
      * @return A new sub query
      */
-    public static JexlNode createNodeTreeFromFieldsToValues(ContainerType containerType, JexlNode node, JexlNode orgNode, IndexLookupMap fieldsToValues) {
+    public static JexlNode createNodeTreeFromFieldsToValues(ContainerType containerType, JexlNode node, JexlNode orgNode, IndexLookupMap fieldsToValues,
+                                                            boolean expandFields, boolean expandValues) {
+        // do nothing if not expanding fields or values
+        if (!expandFields && !expandValues) {
+            return orgNode;
+        }
+
         // no expansions needed if the fieldname threshold is exceeded
         if (fieldsToValues.isKeyThresholdExceeded()) {
             return new ExceededTermThresholdMarkerJexlNode(orgNode);
         }
         
+        // collapse the value sets if not expanding fields
+        if (!expandFields) {
+            ValueSet allValues = new ValueSet(-1);
+            for (ValueSet values : fieldsToValues.values()) {
+                allValues.addAll(values);
+            }
+            fieldsToValues.clear();
+            fieldsToValues.put(JexlASTHelper.getIdentifier(orgNode), allValues);
+        }
+
         Set<String> fields = fieldsToValues.keySet();
-        
+
         JexlNode parentNode = (containerType.equals(ContainerType.OR_NODE) ? new ASTOrNode(ParserTreeConstants.JJTORNODE) : new ASTAndNode(
                         ParserTreeConstants.JJTANDNODE));
         int parentNodeChildCount = 0;
-        
+
         JexlNodes.ensureCapacity(parentNode, fields.size());
         for (String field : fields) {
             ValueSet valuesForField = fieldsToValues.get(field);
+
+            // if not expanding values, then reuse the original node with simply a new field name
+            if (!expandValues) {
+                ASTIdentifier identifier = new ASTIdentifier(ParserTreeConstants.JJTIDENTIFIER);
+                identifier.image = field;
+                JexlNode child = buildUntypedBinaryNode(orgNode, identifier, JexlASTHelper.getLiteral(orgNode));
+                parentNode.jjtAddChild(child, parentNodeChildCount);
+                child.jjtSetParent(parentNode);
+
+                parentNodeChildCount++;
+            }
             
             // a threshold exceeded set of values requires using the original
             // node with a new fieldname, wrapped with a marker node
-            if (valuesForField.isThresholdExceeded()) {
+            else if (valuesForField.isThresholdExceeded()) {
                 // create a set of nodes wrapping each pattern
                 List<String> patterns = new ArrayList<>(fieldsToValues.getPatterns() == null ? new ArrayList<>() : fieldsToValues.getPatterns());
                 if (patterns.isEmpty()) {
@@ -140,7 +168,7 @@ public class JexlNodeFactory {
                     }
                 }
             }
-            
+
             // Don't create an OR if we have only one value, directly attach it
             else if (1 == valuesForField.size()) {
                 JexlNode child = buildUntypedNode(node, field, valuesForField.iterator().next());
@@ -1212,7 +1240,7 @@ public class JexlNodeFactory {
     }
     
     /**
-     * Create a new ASTGENode from the given node (possible an OR Node) and value
+     * Create a new JexlNode from the given node (possible an OR Node) and value
      *
      * @param original
      * @param node
@@ -1239,7 +1267,7 @@ public class JexlNodeFactory {
     }
     
     /**
-     * Create a new ASTGENode from the given node (possible an OR Node) and value
+     * Create a new JexlNode from the given node (possible an OR Node) and value
      *
      * @param original
      * @param node
@@ -1263,7 +1291,7 @@ public class JexlNodeFactory {
     }
     
     /**
-     * Create a new ASTGENode from the given node (possible an OR Node) and value
+     * Create a new JexlNode from the given node (possible an OR Node) and value
      *
      * @param original
      * @param node

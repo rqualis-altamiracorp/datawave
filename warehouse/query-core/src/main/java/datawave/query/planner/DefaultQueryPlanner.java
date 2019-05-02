@@ -878,7 +878,7 @@ public class DefaultQueryPlanner extends QueryPlanner {
             try {
                 
                 expansionFields = metadataHelper.getExpansionFields(config.getDatatypeFilter());
-                queryTree = FixUnfieldedTermsVisitor.fixUnfieldedTree(config, scannerFactory, metadataHelper, queryTree, expansionFields);
+                queryTree = FixUnfieldedTermsVisitor.fixUnfieldedTree(config, scannerFactory, metadataHelper, queryTree, expansionFields, config.isExpandFields(), config.isExpandValues());
             } catch (EmptyUnfieldedTermExpansionException e) {
                 // The visitor will only throw this if we cannot expand anything resulting in empty query
                 stopwatch.stop();
@@ -1088,14 +1088,16 @@ public class DefaultQueryPlanner extends QueryPlanner {
             stopwatch.stop();
         }
         
-        if (isUseIndex() && !disableBoundedLookup) {
+        if (!disableBoundedLookup) {
             stopwatch = timers.newStartedStopwatch("DefaultQueryPlanner - Expand bounded query ranges");
             
             // Expand any bounded ranges into a conjunction of discrete terms
             try {
-                ParallelIndexExpansion regexExpansion = new ParallelIndexExpansion(config, scannerFactory, metadataHelper, expansionFields);
+                ParallelIndexExpansion regexExpansion = new ParallelIndexExpansion(config, scannerFactory, metadataHelper, expansionFields,
+                        config.isExpandFields(), config.isExpandValues());
                 queryTree = (ASTJexlScript) regexExpansion.visit(queryTree, null);
-                queryTree = RangeConjunctionRebuildingVisitor.expandRanges(config, scannerFactory, metadataHelper, queryTree);
+                queryTree = RangeConjunctionRebuildingVisitor.expandRanges(config, scannerFactory, metadataHelper, queryTree,
+                        config.isExpandFields(), config.isExpandValues());
                 queryTree = PushFunctionsIntoExceededValueRanges.pushFunctions(queryTree, metadataHelper, config.getDatatypeFilter());
                 if (log.isDebugEnabled()) {
                     logQuery(queryTree, "Query after expanding regex:");
@@ -1125,7 +1127,8 @@ public class DefaultQueryPlanner extends QueryPlanner {
                     config.setExpandAllTerms(true);
                     
                     queryTree = (ASTJexlScript) regexExpansion.visit(queryTree, null);
-                    queryTree = RangeConjunctionRebuildingVisitor.expandRanges(config, scannerFactory, metadataHelper, queryTree);
+                    queryTree = RangeConjunctionRebuildingVisitor.expandRanges(config, scannerFactory, metadataHelper, queryTree,
+                            config.isExpandFields(), config.isExpandValues());
                     queryTree = PushFunctionsIntoExceededValueRanges.pushFunctions(queryTree, metadataHelper, config.getDatatypeFilter());
                     config.setExpandAllTerms(expandAllTerms);
                     if (log.isDebugEnabled()) {

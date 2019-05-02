@@ -133,7 +133,7 @@ public class IndexLookupMap implements Map<String,ValueSet>, Serializable {
     
     private void testExceeded(String key) {
         
-        if (keyThreshold > 0 && !exceededKeyThreshold && !index.containsKey(key) && (size() + 1 > keyThreshold)) {
+        if (keyThreshold >= 0 && !exceededKeyThreshold && !index.containsKey(key) && (size() + 1 > keyThreshold)) {
             markExceeded();
         }
     }

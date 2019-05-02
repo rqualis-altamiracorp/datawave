@@ -247,7 +247,9 @@ public class ShardQueryConfiguration extends GenericQueryConfiguration implement
     private int shardsPerDayThreshold = 10;
     private int maxTermThreshold = 2500;
     private int maxDepthThreshold = 2500;
+    private boolean expandFields = true;
     private int maxUnfieldedExpansionThreshold = 500;
+    private boolean expandValues = true;
     private int maxValueExpansionThreshold = 5000;
     private int maxOrExpansionThreshold = 500;
     private int maxOrExpansionFstThreshold = 750;
@@ -414,7 +416,9 @@ public class ShardQueryConfiguration extends GenericQueryConfiguration implement
         this.setMaxTermThreshold(other.getMaxTermThreshold());
         this.setMaxDepthThreshold(other.getMaxDepthThreshold());
         this.setMaxUnfieldedExpansionThreshold(other.getMaxUnfieldedExpansionThreshold());
+        this.setExpandFields(other.isExpandFields());
         this.setMaxValueExpansionThreshold(other.getMaxValueExpansionThreshold());
+        this.setExpandValues(other.isExpandValues());
         this.setMaxOrExpansionThreshold(other.getMaxOrExpansionThreshold());
         this.setMaxOrExpansionFstThreshold(other.getMaxOrExpansionFstThreshold());
         this.setYieldThresholdMs(other.getYieldThresholdMs());
@@ -968,7 +972,16 @@ public class ShardQueryConfiguration extends GenericQueryConfiguration implement
     public void setMaxDepthThreshold(int maxDepthThreshold) {
         this.maxDepthThreshold = maxDepthThreshold;
     }
-    
+
+
+    public boolean isExpandFields() {
+        return expandFields;
+    }
+
+    public void setExpandFields(boolean expandFields) {
+        this.expandFields = expandFields;
+    }
+
     public int getMaxUnfieldedExpansionThreshold() {
         return maxUnfieldedExpansionThreshold;
     }
@@ -976,7 +989,15 @@ public class ShardQueryConfiguration extends GenericQueryConfiguration implement
     public void setMaxUnfieldedExpansionThreshold(int maxUnfieldedExpansionThreshold) {
         this.maxUnfieldedExpansionThreshold = maxUnfieldedExpansionThreshold;
     }
-    
+
+    public boolean isExpandValues() {
+        return expandValues;
+    }
+
+    public void setExpandValues(boolean expandValues) {
+        this.expandValues = expandValues;
+    }
+
     public int getMaxValueExpansionThreshold() {
         return maxValueExpansionThreshold;
     }

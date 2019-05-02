@@ -859,7 +859,7 @@ public class QueryExecutorBean implements QueryExecutor {
             }
             
             Set<Authorizations> calculatedAuths = AuthorizationsUtil.getDowngradedAuthorizations(qp.getAuths(), qd.p);
-            String plan = qd.logic.getPlan(connection, q, calculatedAuths, false);
+            String plan = qd.logic.getPlan(connection, q, calculatedAuths, true, false);
             response.setResult(plan);
             
             return response;
